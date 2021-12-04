@@ -8,12 +8,14 @@ import (
 )
 
 type Computer struct {
-	arrays map[uint32][]uint32
+	arrays    map[uint32][]uint32
+	registers []uint32
 }
 
 func NewComputer() *Computer {
 	return &Computer{
-		arrays: make(map[uint32][]uint32, 1),
+		arrays:    make(map[uint32][]uint32, 1),
+		registers: make([]uint32, 8),
 	}
 }
 
