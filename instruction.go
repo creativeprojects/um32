@@ -49,3 +49,7 @@ func (i *Instruction) RegisterB() uint8 {
 func (i *Instruction) RegisterC() uint8 {
 	return uint8(i.data & 7)
 }
+
+func (i *Instruction) SpecialData() uint32 {
+	return i.data & 0x01ffffff
+}
