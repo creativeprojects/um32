@@ -3,14 +3,11 @@ package main
 import (
 	"log"
 	"os"
+	"testing"
 )
 
-func main() {
-	if len(os.Args) <= 1 {
-		log.Printf("missing program to run")
-		return
-	}
-	file, err := os.Open(os.Args[1])
+func TestComputer(t *testing.T) {
+	file, err := os.Open("sandmark.umz")
 	if err != nil {
 		log.Printf("%s", err)
 		return
@@ -18,7 +15,7 @@ func main() {
 	defer file.Close()
 
 	computer := NewComputer()
-	// computer.SetTrace(log.Default())
+	computer.SetTrace(log.Default())
 	loaded, err := computer.Load(file)
 	if err != nil {
 		log.Printf("loading program: %s", err)
