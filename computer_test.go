@@ -16,7 +16,7 @@ func TestComputer(t *testing.T) {
 
 	computer := NewComputer()
 	computer.SetTrace(log.Default())
-	loaded, err := computer.Load(file)
+	loaded, err := computer.Load(file, 14091)
 	if err != nil {
 		log.Printf("loading program: %s", err)
 		return
