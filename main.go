@@ -4,11 +4,15 @@ import (
 	"flag"
 	"log"
 	"os"
+	"runtime/pprof"
+	"time"
 )
 
 func main() {
-	var trace bool
-	flag.BoolVar(&trace, "trace", false, "Display information on each instruction executed")
+	var cpuprofile string
+	var preAlloc uint
+	flag.StringVar(&cpuprofile, "cpu-profile", "", "Saves a CPU profile")
+	flag.UintVar(&preAlloc, "pre-alloc", 10_000_000, "Pre-allocate memory")
 	flag.Parse()
 
 	args := flag.Args()
@@ -30,10 +34,21 @@ func main() {
 	}
 	defer file.Close()
 
-	computer := NewComputer()
-	if trace {
-		computer.SetTrace(log.Default())
+	if cpuprofile != "" {
+		f, err := os.Create(cpuprofile)
+		if err != nil {
+			log.Printf("could not create CPU profile: %s", err)
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Printf("could not start CPU profile: %s", err)
+		}
+		defer pprof.StopCPUProfile()
 	}
+
+	start := time.Now()
+	computer := NewComputer()
+	computer.PreAlloc(uint32(preAlloc))
 	loaded, err := computer.Load(file, int(stat.Size()/4+1))
 	if err != nil {
 		log.Fatalf("loading program: %s", err)
@@ -43,4 +58,5 @@ func main() {
 	if err != nil {
 		log.Fatalf("running program: %s", err)
 	}
+	log.Printf("finished running in %s", time.Since(start))
 }

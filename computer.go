@@ -10,24 +10,32 @@ import (
 )
 
 type Computer struct {
-	arrays      [][]uint32
-	registers   []uint32
-	instruction *Instruction
-	trace       Logger
+	registers      [8]uint32
+	arrays         [][]uint32
+	preAlloc       []uint32
+	preAllocIndex  uint32
+	instruction    *Instruction
+	bufferCount    uint32
+	totalAllocSize uint32
+	maxAllocSize   uint32
 }
 
 func NewComputer() *Computer {
 	return &Computer{
-		arrays:      make([][]uint32, 1),
-		registers:   make([]uint32, 8),
+		arrays:      make([][]uint32, 1, 100_000_000),
 		instruction: &Instruction{},
-		trace:       &dummyLogger{},
 	}
 }
 
+func (c *Computer) PreAlloc(size uint32) {
+	c.preAlloc = make([]uint32, size)
+	c.preAllocIndex = 0
+}
+
 func (c *Computer) Load(program io.Reader, capacity int) (int, error) {
-	memory := make([]uint32, 0)
+	memory := make([]uint32, capacity)
 	buffer := make([]byte, 4)
+	index := 0
 	for {
 		read, err := program.Read(buffer)
 		if err == io.EOF {
@@ -42,7 +50,12 @@ func (c *Computer) Load(program io.Reader, capacity int) (int, error) {
 			return len(memory), fmt.Errorf("expected to read 4 bytes but read %d", read)
 		}
 		temp := binary.BigEndian.Uint32(buffer)
-		memory = append(memory, temp)
+		if index >= len(memory) {
+			memory = append(memory, temp)
+		} else {
+			memory[index] = temp
+		}
+		index++
 	}
 }
 
@@ -55,36 +68,29 @@ func (c *Computer) Run() error {
 		opcode := c.instruction.Opcode()
 		switch opcode {
 		case OpcodeConditionalMove:
-			// c.trace.Printf("[PC %6d] if C(%s), A(%s) = B(%s)", pc, c.DebugRegisterC(), c.DebugRegisterA(), c.DebugRegisterB())
 			if c.getRegisterC() != 0 {
 				c.setRegisterA(c.getRegisterB())
 			}
 
 		case OpcodeArrayIndex:
-			// c.trace.Printf("A = B[C]")
 			c.setRegisterA(c.arrays[c.getRegisterB()][c.getRegisterC()])
 
 		case OpcodeArrayAmendment:
-			// c.trace.Printf("A[B] = C")
 			c.arrays[c.getRegisterA()][c.getRegisterB()] = c.getRegisterC()
 
 		case OpcodeAddition:
-			// c.trace.Printf("[PC %6d] A(%s) = B(%s) + C(%s)", pc, c.DebugRegisterA(), c.DebugRegisterB(), c.DebugRegisterC())
 			c.setRegisterA(c.getRegisterB() + c.getRegisterC())
 
 		case OpcodeMultiplication:
-			// c.trace.Printf("A = B * C")
 			c.setRegisterA(c.getRegisterB() * c.getRegisterC())
 
 		case OpcodeDivision:
-			// c.trace.Printf("A = B / C")
 			if c.getRegisterC() == 0 {
 				return fmt.Errorf("division by zero")
 			}
 			c.setRegisterA(c.getRegisterB() / c.getRegisterC())
 
 		case OpcodeNotAnd:
-			// c.trace.Printf("A = B nand C")
 			c.setRegisterA(^(c.getRegisterB() & c.getRegisterC()))
 
 		case OpcodeHalt:
@@ -92,13 +98,22 @@ func (c *Computer) Run() error {
 			return nil
 
 		case OpcodeAllocation:
-			// c.trace.Printf("B = allocate C words")
-			newArray := make([]uint32, c.getRegisterC())
-			c.arrays = append(c.arrays, newArray)
+			size := c.getRegisterC()
+			if size > c.maxAllocSize {
+				c.maxAllocSize = size
+			}
+			if c.preAllocIndex+size <= uint32(len(c.preAlloc)) {
+				c.arrays = append(c.arrays, c.preAlloc[c.preAllocIndex:c.preAllocIndex+size])
+				c.preAllocIndex += size
+			} else {
+				newArray := make([]uint32, size)
+				c.arrays = append(c.arrays, newArray)
+			}
+			c.bufferCount++
+			c.totalAllocSize += size
 			c.setRegisterB(uint32(len(c.arrays) - 1))
 
 		case OpcodeAbandonment:
-			// c.trace.Printf("deallocate C")
 			c.arrays[c.getRegisterC()] = nil
 
 		case OpcodeOutput:
@@ -134,7 +149,6 @@ func (c *Computer) Run() error {
 			pc = c.getRegisterC()
 
 		case OpcodeOrthography:
-			// c.trace.Printf("[PC %6d] A(%s) = load %x", pc, c.DebugRegisterA(), c.instruction.SpecialData())
 			c.setRegisterA(c.instruction.SpecialData())
 
 		default:
@@ -143,10 +157,6 @@ func (c *Computer) Run() error {
 	}
 	log.Print("program finished (no more instruction)")
 	return nil
-}
-
-func (c *Computer) SetTrace(trace Logger) {
-	c.trace = trace
 }
 
 func (c *Computer) getRegister(register uint8) uint32 {
@@ -177,15 +187,4 @@ func (c *Computer) setRegisterB(value uint32) {
 }
 func (c *Computer) setRegisterC(value uint32) {
 	c.setRegister(c.instruction.RegisterC(), value)
-}
-
-func (c *Computer) DebugRegisterA() string {
-	return fmt.Sprintf("%d:%x", c.instruction.RegisterA(), c.getRegisterA())
-}
-
-func (c *Computer) DebugRegisterB() string {
-	return fmt.Sprintf("%d:%x", c.instruction.RegisterB(), c.getRegisterB())
-}
-func (c *Computer) DebugRegisterC() string {
-	return fmt.Sprintf("%d:%x", c.instruction.RegisterC(), c.getRegisterC())
 }
